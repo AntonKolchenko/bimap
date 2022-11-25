@@ -158,7 +158,7 @@ struct set : Comparator { /// AVL-tree
     if (pointer == nullptr) {
       return root;
     }
-    if (get_value(pointer) == value) {
+    if (cmp()(get_value(pointer), value) == cmp()(value, get_value(pointer))) {
       return pointer;
     }
     if (cmp()(get_value(pointer), value)) {
@@ -183,7 +183,8 @@ struct set : Comparator { /// AVL-tree
     if (tmp_pointer == root) {
       return root;
     }
-    if (get_value(tmp_pointer) == value) {
+    if (cmp()(get_value(tmp_pointer), value) ==
+        cmp()(value, get_value(tmp_pointer))) {
       return next(tmp_pointer);
     }
     return tmp_pointer;
@@ -195,7 +196,8 @@ struct set : Comparator { /// AVL-tree
     if (pointer == root) {
       return root;
     }
-    if (get_value(pointer) != value) {
+
+    if (cmp()(get_value(pointer), value) != cmp()(value, get_value(pointer))) {
       return root;
     }
 
