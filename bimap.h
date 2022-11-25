@@ -94,6 +94,9 @@ public:
         base_iterator<other_iterator_t, other_iterator_tag, iterator_t,
                       iterator_tag>;
     other_type_iterator flip() const {
+      if (ptr->parent->parent == ptr) {
+        return other_type_iterator(ptr->parent);
+      }
       auto* tmp_node = static_cast<tmp_node_t*>(ptr);
       auto* tmp_lca_node = static_cast<tmp_node_lca_t*>(tmp_node);
       auto* other_tmp_node = static_cast<other_tmp_node_t*>(tmp_lca_node);
@@ -124,11 +127,15 @@ public:
   bimap(CompareLeft compare_left = CompareLeft(),
         CompareRight compare_right = CompareRight())
       : left_set(std::move(compare_left)), right_set(std::move(compare_right)) {
+    left_set.root->parent = right_set.root;
+    right_set.root->parent = left_set.root;
   }
 
   // Конструкторы от других и присваивания
   bimap(bimap const& other)
       : left_set(CompareLeft()), right_set(CompareRight()), bimap_size(0) {
+    left_set.root->parent = right_set.root;
+    right_set.root->parent = left_set.root;
     for (auto it = other.begin_left(); it != other.end_left(); it++) {
       insert(*it, *it.flip());
     }

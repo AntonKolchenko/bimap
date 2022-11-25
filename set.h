@@ -53,7 +53,6 @@ struct set : Comparator { /// AVL-tree
 
   explicit set(Comparator compare = Comparator()) : Comparator(compare) {
     root = &fictitious;
-    root->parent = root;
   }
 
   set(set const& other) = delete;
