@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdexcept>
 #include <type_traits>
 
 #include "set.h"
@@ -104,12 +105,12 @@ public:
       return ptr;
     }
 
-    friend bool operator==(base_iterator const& left,
-                           base_iterator const& right) {
-      return left.ptr == right.ptr;
+    bool operator==(base_iterator const& other) const {
+      return other.ptr == ptr;
     }
-    friend bool operator!=(base_iterator& left, base_iterator& right) {
-      return !(left == right);
+
+    bool operator!=(base_iterator const& other) const {
+      return other.ptr != ptr;
     }
 
   private:
@@ -427,24 +428,23 @@ public:
     return bimap_size;
   }
 
-  friend bool operator==(bimap const& a, bimap const& b) {
-    if (a.bimap_size != b.bimap_size) {
+  bool operator==(bimap const& other) const {
+    if (bimap_size != other.bimap_size) {
       return false;
     }
-
-    for (auto a_it = a.begin_left(), b_it = b.begin_left();
-         b_it != b.end_left(); a_it++, b_it++) {
-      if (*a_it != *b_it) {
+    for (auto it = begin_left(), other_it = other.begin_left();
+         it != end_left(); it++, other_it++) {
+      if (*it != *other_it) {
         return false;
       }
-      if (*(a_it.flip()) != *(b_it.flip())) {
+      if (*it.flip() != *other_it.flip()) {
         return false;
       }
+      return true;
     }
-    return true;
   }
 
-  friend bool operator!=(bimap const& a, bimap const& b) {
-    return !(a == b);
+  bool operator!=(bimap const& other) const {
+    return !(*this == other);
   }
 };

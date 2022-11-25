@@ -150,7 +150,7 @@ struct set : Comparator { /// AVL-tree
     }
   }
 
-  static type_T& get_value(set_element_base* pointer) {
+  type_T const& get_value(set_element_base* pointer) const {
     return static_cast<T&>(*pointer).value;
   }
 
