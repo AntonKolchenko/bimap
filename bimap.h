@@ -441,12 +441,15 @@ public:
     }
     for (auto it = begin_left(), other_it = other.begin_left();
          it != end_left(); it++, other_it++) {
-      if (*it != *other_it) {
+      if (left_set.cmp()(*it, *other_it) != left_set.cmp()(*other_it, *it)) {
         return false;
       }
-      if (*it.flip() != *other_it.flip()) {
+
+      if (right_set.cmp()(*it.flip(), *other_it.flip()) !=
+          right_set.cmp()(*other_it.flip(), *it.flip())) {
         return false;
       }
+
       return true;
     }
   }
