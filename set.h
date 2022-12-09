@@ -1,5 +1,6 @@
 #pragma once
 
+#include "bimap.h"
 #include <utility>
 
 namespace intrusive {
@@ -9,65 +10,136 @@ struct set_element_base {
   set_element_base* right{nullptr};
   set_element_base* parent{nullptr};
   std::size_t height = 1;
+
+  set_element_base* get_max_node_ptr() {
+    auto* pointer = this;
+    while (pointer->right) {
+      pointer = pointer->right;
+    }
+    return pointer;
+  }
+  set_element_base* get_min_node_ptr() {
+    set_element_base* pointer = this;
+    while (pointer->left) {
+      pointer = pointer->left;
+    }
+    return pointer;
+  }
+  set_element_base* next() {
+    set_element_base* pointer = this;
+    if (pointer->right) {
+      pointer = pointer->right;
+      return pointer->get_min_node_ptr();
+    }
+    while (pointer->parent && pointer->parent->right == pointer) {
+      pointer = pointer->parent;
+    }
+    return pointer->parent;
+  }
+  set_element_base* prev() {
+    set_element_base* pointer = this;
+    if (pointer->left) {
+      return pointer->left->get_max_node_ptr();
+    }
+    while (pointer->parent && pointer->parent->left == pointer) {
+      pointer = pointer->parent;
+    }
+    return pointer->parent;
+  }
 };
-
-set_element_base* get_max_node_ptr(set_element_base* pointer) {
-  while (pointer->right) {
-    pointer = pointer->right;
-  }
-  return pointer;
-}
-set_element_base* get_min_node_ptr(set_element_base* pointer) {
-  while (pointer->left) {
-    pointer = pointer->left;
-  }
-  return pointer;
-}
-
-set_element_base* next(set_element_base* pointer) {
-  if (pointer->right) {
-    pointer = pointer->right;
-    return get_min_node_ptr(pointer);
-  }
-  while (pointer->parent && pointer->parent->right == pointer) {
-    pointer = pointer->parent;
-  }
-  return pointer->parent;
-}
-set_element_base* prev(set_element_base* pointer) {
-  if (pointer->left) {
-    return get_max_node_ptr(pointer->left);
-  }
-  while (pointer->parent && pointer->parent->left == pointer) {
-    pointer = pointer->parent;
-  }
-  return pointer->parent;
-}
 
 template <class T, class type_T, class Tag,
           class Comparator = std::less<type_T>>
 struct set : Comparator { /// AVL-tree
 
-  set_element_base fictitious;
-  set_element_base* root;
+  set_element_base* root{nullptr};
 
-  explicit set(Comparator compare = Comparator()) : Comparator(compare) {
-    root = &fictitious;
+  explicit set(Comparator compare = Comparator())
+      : Comparator(std::move(compare)) {
+    root = new set_element_base;
   }
 
   set(set const& other) = delete;
+
+  ~set() {
+    delete root;
+  }
 
   Comparator const& cmp() const {
     return static_cast<const Comparator&>(*this);
   }
 
-  void upd(set_element_base* pointer) {
+  set_element_base* lower_bound(const type_T& value) const {
+    return lower_bound(value, root->left);
+  }
+
+  set_element_base* upper_bound(const type_T& value) const {
+    set_element_base* tmp_pointer = lower_bound(value);
+    if (tmp_pointer == root) {
+      return root;
+    }
+    if (cmp()(get_value(tmp_pointer), value) ==
+        cmp()(value, get_value(tmp_pointer))) {
+      return tmp_pointer->next();
+    }
+    return tmp_pointer;
+  }
+
+  set_element_base* find_ptr(const type_T& value) const {
+    set_element_base* pointer = lower_bound(value);
+
+    if (pointer == root) {
+      return root;
+    }
+
+    if (cmp()(get_value(pointer), value) != cmp()(value, get_value(pointer))) {
+      return root;
+    }
+
+    return pointer;
+  }
+
+  void insert(T& element) {
+    if (root->left == nullptr) {
+      root->left = &static_cast<set_element_base&>(element);
+      root->left->parent = root;
+      return;
+    }
+    insert(element, root->left);
+  }
+
+  void erase(const type_T& value) {
+    set_element_base* pointer = find_ptr(value);
+    if (pointer == root) {
+      return;
+    }
+    pointer = erase(pointer);
+    while (pointer != root) {
+      auto tmp_ptr = pointer->parent;
+      correcter(pointer);
+      pointer = tmp_ptr;
+    }
+  }
+
+  set_element_base* begin_ptr() const {
+    if (root->left) {
+      return root->left->get_min_node_ptr();
+    }
+    return root;
+  }
+
+  set_element_base* end_ptr() const {
+    return root;
+  }
+
+private:
+  static void upd(set_element_base* pointer) {
     pointer->height =
         std::max(height(pointer->left), height(pointer->right)) + 1;
   }
 
-  void left_rotate(set_element_base* pointer) {
-    set_element_base* ptr = pointer;
+  static void left_rotate(set_element_base* pointer) {
+    auto* ptr = pointer;
     pointer = pointer->left;
 
     ptr->left = pointer->right;
@@ -90,8 +162,8 @@ struct set : Comparator { /// AVL-tree
     upd(pointer);
   }
 
-  void right_rotate(set_element_base* pointer) {
-    set_element_base* ptr = pointer;
+  static void right_rotate(set_element_base* pointer) {
+    auto* ptr = pointer;
     pointer = pointer->right;
 
     ptr->right = pointer->left;
@@ -113,25 +185,25 @@ struct set : Comparator { /// AVL-tree
     upd(pointer);
   }
 
-  std::size_t height(set_element_base* ptr) {
+  static std::size_t height(set_element_base* ptr) {
     return (ptr == nullptr ? 0 : ptr->height);
   }
 
-  std::size_t balance(set_element_base* pointer) {
+  static std::size_t balance(set_element_base* pointer) {
     if (height(pointer->left) > height(pointer->right)) {
       return height(pointer->left) - height(pointer->right);
     }
     return height(pointer->right) - height(pointer->left);
   }
 
-  void correcter(set_element_base* pointer) {
+  static void correcter(set_element_base* pointer) {
     upd(pointer);
     if (balance(pointer) < 2) {
       return;
     }
 
     if (height(pointer->left) > height(pointer->right)) {
-      auto ptr = pointer->left;
+      auto* ptr = pointer->left;
       if (height(ptr->left) > height(ptr->right)) {
         left_rotate(pointer);
       } else {
@@ -139,7 +211,7 @@ struct set : Comparator { /// AVL-tree
         left_rotate(pointer);
       }
     } else {
-      auto ptr = pointer->right;
+      auto* ptr = pointer->right;
       if (height(ptr->left) < height(ptr->right)) {
         right_rotate(pointer);
       } else {
@@ -149,95 +221,7 @@ struct set : Comparator { /// AVL-tree
     }
   }
 
-  type_T const& get_value(set_element_base* pointer) const {
-    return static_cast<T&>(*pointer).value;
-  }
-
-  set_element_base* lower_bound(const type_T& value,
-                                set_element_base* pointer) const {
-    if (pointer == nullptr) {
-      return root;
-    }
-    if (cmp()(get_value(pointer), value) == cmp()(value, get_value(pointer))) {
-      return pointer;
-    }
-    if (cmp()(get_value(pointer), value)) {
-      if (pointer->right) {
-        return lower_bound(value, pointer->right);
-      }
-      return next(pointer);
-    } else {
-      if (pointer->left) {
-        return lower_bound(value, pointer->left);
-      }
-      return pointer;
-    }
-  }
-
-  set_element_base* lower_bound(const type_T& value) const {
-    return lower_bound(value, root->left);
-  }
-
-  set_element_base* upper_bound(const type_T& value) const {
-    set_element_base* tmp_pointer = lower_bound(value);
-    if (tmp_pointer == root) {
-      return root;
-    }
-    if (cmp()(get_value(tmp_pointer), value) ==
-        cmp()(value, get_value(tmp_pointer))) {
-      return next(tmp_pointer);
-    }
-    return tmp_pointer;
-  }
-
-  set_element_base* find_ptr(const type_T& value) const {
-    set_element_base* pointer = lower_bound(value);
-
-    if (pointer == root) {
-      return root;
-    }
-
-    if (cmp()(get_value(pointer), value) != cmp()(value, get_value(pointer))) {
-      return root;
-    }
-
-    return pointer;
-  }
-
-  void insert(T& element, set_element_base* pointer) {
-    auto& tree_value = get_value(pointer);
-    if (cmp()(element.value, tree_value)) {
-      if (pointer->left) {
-        insert(element, pointer->left);
-      } else {
-        pointer->left = &static_cast<set_element_base&>(element);
-        pointer->left->parent = pointer;
-        upd(pointer);
-        return;
-      }
-    } else {
-      if (pointer->right) {
-        insert(element, pointer->right);
-      } else {
-        pointer->right = &static_cast<set_element_base&>(element);
-        pointer->right->parent = pointer;
-        upd(pointer);
-        return;
-      }
-    }
-    correcter(pointer);
-  }
-
-  void insert(T& element) {
-    if (root->left == nullptr) {
-      root->left = &static_cast<set_element_base&>(element);
-      root->left->parent = root;
-      return;
-    }
-    insert(element, root->left);
-  }
-
-  void erase_one_child(set_element_base* pointer) {
+  static void erase_one_child(set_element_base* pointer) {
     set_element_base* child_ptr;
     if (pointer->left) {
       child_ptr = pointer->left;
@@ -254,11 +238,11 @@ struct set : Comparator { /// AVL-tree
     upd(child_ptr->parent);
   }
 
-  void swap_link_in_edge(set_element_base* up, set_element_base* down) {
-    auto global_parent = up->parent;
+  static void swap_link_in_edge(set_element_base* up, set_element_base* down) {
+    auto* global_parent = up->parent;
 
     if (up->left == down) {
-      auto up_right_child = up->right;
+      auto* up_right_child = up->right;
 
       up->left = down->left;
       up->right = down->right;
@@ -274,7 +258,7 @@ struct set : Comparator { /// AVL-tree
       down->left = up;
       down->right = up_right_child;
     } else {
-      auto up_left_child = up->left;
+      auto* up_left_child = up->left;
 
       up->left = down->left;
       up->right = down->right;
@@ -310,7 +294,7 @@ struct set : Comparator { /// AVL-tree
     upd(down);
   }
 
-  void swap_link(set_element_base* up, set_element_base* down) {
+  static void swap_link(set_element_base* up, set_element_base* down) {
     if (up->left == down || up->right == down) {
       swap_link_in_edge(up, down);
       return;
@@ -349,9 +333,9 @@ struct set : Comparator { /// AVL-tree
     upd(down);
   }
 
-  set_element_base* erase(set_element_base* pointer) {
+  static set_element_base* erase(set_element_base* pointer) {
     if (!(pointer->left) && !(pointer->right)) {
-      auto parent_ptr = pointer->parent;
+      auto* parent_ptr = pointer->parent;
       if (parent_ptr->left == pointer) {
         parent_ptr->left = nullptr;
       } else {
@@ -360,37 +344,63 @@ struct set : Comparator { /// AVL-tree
       return parent_ptr;
     }
     if (!(pointer->left) || !(pointer->right)) {
-      auto tmp = pointer->parent;
+      auto* tmp = pointer->parent;
       erase_one_child(pointer);
       return tmp;
     }
 
-    set_element_base* aim_node_ptr = get_max_node_ptr(pointer->left);
+    auto* aim_node_ptr = pointer->left->get_max_node_ptr();
     swap_link(pointer, aim_node_ptr);
     return erase(pointer);
   }
 
-  void erase(const type_T& value) {
-    set_element_base* pointer = find_ptr(value);
-    if (pointer == root) {
-      return;
-    }
-    pointer = erase(pointer);
-    while (pointer != root) {
-      auto tmp_ptr = pointer->parent;
-      correcter(pointer);
-      pointer = tmp_ptr;
-    }
+  static type_T const& get_value(set_element_base* pointer) {
+    return static_cast<T&>(*pointer).value;
   }
 
-  set_element_base* begin_ptr() const {
-    if (root->left) {
-      return get_min_node_ptr(root->left);
+  void insert(T& element, set_element_base* pointer) {
+    auto& tree_value = get_value(pointer);
+    if (cmp()(element.value, tree_value)) {
+      if (pointer->left) {
+        insert(element, pointer->left);
+      } else {
+        pointer->left = static_cast<set_element_base*>(&element);
+        pointer->left->parent = pointer;
+        upd(pointer);
+        return;
+      }
+    } else {
+      if (pointer->right) {
+        insert(element, pointer->right);
+      } else {
+        pointer->right = static_cast<set_element_base*>(&element);
+        pointer->right->parent = pointer;
+        upd(pointer);
+        return;
+      }
     }
-    return root;
+    correcter(pointer);
   }
-  set_element_base* end_ptr() const {
-    return root;
+
+  set_element_base* lower_bound(const type_T& value,
+                                set_element_base* pointer) const {
+    if (pointer == nullptr) {
+      return root;
+    }
+    if (cmp()(get_value(pointer), value) == cmp()(value, get_value(pointer))) {
+      return pointer;
+    }
+    if (cmp()(get_value(pointer), value)) {
+      if (pointer->right) {
+        return lower_bound(value, pointer->right);
+      }
+      return pointer->next();
+    } else {
+      if (pointer->left) {
+        return lower_bound(value, pointer->left);
+      }
+      return pointer;
+    }
   }
 };
 } // namespace intrusive

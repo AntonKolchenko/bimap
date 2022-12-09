@@ -16,17 +16,32 @@ private:
   template <class T, class Tag>
   struct node_element : intrusive::set_element_base {
     T value;
-    node_element(T value)
-        : value(std::move(value)), intrusive::set_element_base() {}
+
+    node_element(T const& val) : value(val), intrusive::set_element_base() {}
+
+    node_element(T&& val)
+        : value(std::move(val)), intrusive::set_element_base() {}
   };
 
   using left_t = Left;
   using right_t = Right;
 
   struct node : node_element<Left, LEFT_TAG>, node_element<Right, RIGHT_TAG> {
-    node(Left left, Right right)
+    node(Left&& left, Right&& right)
         : node_element<Left, LEFT_TAG>(std::move(left)),
           node_element<Right, RIGHT_TAG>(std::move(right)) {}
+
+    node(Left const& left, Right&& right)
+        : node_element<Left, LEFT_TAG>(left), node_element<Right, RIGHT_TAG>(
+                                                  std::move(right)) {}
+
+    node(Left&& left, Right const& right)
+        : node_element<Left, LEFT_TAG>(std::move(left)),
+          node_element<Right, RIGHT_TAG>(right) {}
+
+    node(Left const& left, Right const& right)
+        : node_element<Left, LEFT_TAG>(left), node_element<Right, RIGHT_TAG>(
+                                                  right) {}
   };
 
   using node_t = node;
@@ -38,80 +53,75 @@ private:
       right_set;
 
 public:
-  template <class iterator_t, class iterator_tag, class other_iterator_t,
-            class other_iterator_tag>
+  template <class iterator_value, class iterator_tag,
+            class other_iterator_value, class other_iterator_tag>
   struct base_iterator {
     using iterator_category = std::bidirectional_iterator_tag;
     using difference_type = std::ptrdiff_t;
-    using value_type = iterator_t;
-    using pointer = iterator_t*;
-    using reference = iterator_t&;
-
-    using tmp_node_lca_t =
-        std::conditional_t<std::is_const_v<iterator_t>, node const, node>;
-
-    using tmp_node_t =
-        std::conditional_t<std::is_const_v<iterator_t>,
-                           node_element<iterator_t, iterator_tag> const,
-                           node_element<iterator_t, iterator_tag>>;
-    using other_tmp_node_t = std::conditional_t<
-        std::is_const_v<iterator_t>,
-        node_element<other_iterator_t, other_iterator_tag> const,
-        node_element<other_iterator_t, other_iterator_tag>>;
+    using value_type = iterator_value;
+    using pointer = iterator_value*;
+    using reference = iterator_value&;
 
     base_iterator() = default;
 
     base_iterator(intrusive::set_element_base* ptr) : ptr(ptr) {}
 
     base_iterator& operator++() {
-      ptr = intrusive::next(ptr);
+      ptr = ptr->next();
       return *this;
     }
     base_iterator operator++(int) {
       auto tmp = *this;
-      ptr = intrusive::next(ptr);
+      ptr = ptr->next();
       return tmp;
     }
 
     base_iterator& operator--() {
-      ptr = intrusive::prev(ptr);
+      ptr = ptr->prev();
       return *this;
     }
     base_iterator operator--(int) {
       auto tmp = *this;
-      ptr = intrusive::prev(ptr);
+      ptr = ptr->prev();
       return tmp;
     }
 
     reference operator*() const {
-      return static_cast<node_element<iterator_t, iterator_tag>&>(*ptr).value;
+      return static_cast<node_element<iterator_value, iterator_tag>&>(*ptr)
+          .value;
     }
     pointer operator->() const {
       return &operator*();
     }
 
     using other_type_iterator =
-        base_iterator<other_iterator_t, other_iterator_tag, iterator_t,
+        base_iterator<other_iterator_value, other_iterator_tag, iterator_value,
                       iterator_tag>;
     other_type_iterator flip() const {
       if (ptr->parent->parent == ptr) {
         return other_type_iterator(ptr->parent);
       }
-      auto* tmp_node = static_cast<tmp_node_t*>(ptr);
-      auto* tmp_lca_node = static_cast<tmp_node_lca_t*>(tmp_node);
-      auto* other_tmp_node = static_cast<other_tmp_node_t*>(tmp_lca_node);
+
+      auto* tmp_node =
+          static_cast<node_element<iterator_value, iterator_tag>*>(ptr);
+      auto* tmp_lca_node = static_cast<node*>(tmp_node);
+      auto* other_tmp_node =
+          static_cast<node_element<other_iterator_value, other_iterator_tag>*>(
+              tmp_lca_node);
+
       return other_type_iterator(
           static_cast<intrusive::set_element_base*>(other_tmp_node));
     }
 
-    intrusive::set_element_base* get_ptr() const {
-      return ptr;
+    node_t* get_ptr_node_t() const {
+      auto* tmp_node =
+          static_cast<node_element<iterator_value, iterator_tag>*>(ptr);
+      return static_cast<node_t*>(tmp_node);
     }
 
     bool operator==(base_iterator const& other) const {
       return other.ptr == ptr;
     }
-
     bool operator!=(base_iterator const& other) const {
       return other.ptr != ptr;
     }
@@ -132,12 +142,19 @@ public:
   }
 
   // Конструкторы от других и присваивания
-  bimap(bimap const& other)
-      : left_set(CompareLeft()), right_set(CompareRight()), bimap_size(0) {
+  bimap(bimap const& other) {
     left_set.root->parent = right_set.root;
     right_set.root->parent = left_set.root;
-    for (auto it = other.begin_left(); it != other.end_left(); it++) {
-      insert(*it, *it.flip());
+
+    try {
+      for (auto it = other.begin_left(); it != other.end_left(); ++it) {
+        insert(*it, *it.flip());
+      }
+    } catch (...) {
+      while (size() > 0) {
+        erase_left(begin_left());
+      }
+      throw;
     }
   }
 
@@ -145,137 +162,41 @@ public:
 
   bimap& operator=(bimap const& other) {
     if (*this != other) {
-      bimap<Left, Right, CompareLeft, CompareRight>(other).swap(*this);
+      bimap(other).swap(*this);
     }
     return *this;
   }
 
   bimap& operator=(bimap&& other) noexcept {
     if (*this != other) {
-      bimap<Left, Right, CompareLeft, CompareRight>(std::move(other))
-          .swap(*this);
+      bimap(std::move(other)).swap(*this);
     }
     return *this;
-  }
-
-  void swap(bimap& other) {
-    bimap tmp(*this);
-
-    erase_left(begin_left(), end_left());
-    for (auto it = other.begin_left(); it != other.end_left(); it++) {
-      insert(*it, *it.flip());
-    }
-
-    other.erase_left(other.begin_left(), other.end_left());
-    for (auto it = tmp.begin_left(); it != tmp.end_left(); it++) {
-      other.insert(*it, *it.flip());
-    }
   }
 
   // Деструктор. Вызывается при удалении объектов bimap.
   // Инвалидирует все итераторы ссылающиеся на элементы этого bimap
   // (включая итераторы ссылающиеся на элементы следующие за последними).
-  ~bimap() {
+  ~bimap() noexcept {
     erase_left(begin_left(), end_left());
   }
 
   // Вставка пары (left, right), возвращает итератор на left.
   // Если такой left или такой right уже присутствуют в bimap, вставка не
   // производится и возвращается end_left().
-  left_iterator insert(left_t const& left, right_t const& right) {
-    if (find_left(left) != end_left() || find_right(right) != end_right()) {
-      return end_left();
-    }
 
-    node_t* pointer = new node_t(left, right);
-
-    auto& l_node = static_cast<node_element<Left, LEFT_TAG>&>(*pointer);
-    auto& r_node = static_cast<node_element<Right, RIGHT_TAG>&>(*pointer);
-
-    right_set.insert(r_node);
-    left_set.insert(l_node);
-
-    bimap_size++;
-    return left_iterator(left_set.find_ptr(l_node.value));
+  left_iterator insert(left_t&& left, right_t&& right) {
+    return perfect_insert(std::forward<left_t>(left),
+                          std::forward<right_t>(right));
   }
   left_iterator insert(left_t const& left, right_t&& right) {
-    if (find_left(left) != end_left() || find_right(right) != end_right()) {
-      return end_left();
-    }
-
-    node_t* pointer = new node_t(left, std::move(right));
-
-    auto& l_node = static_cast<node_element<Left, LEFT_TAG>&>(*pointer);
-    auto& r_node = static_cast<node_element<Right, RIGHT_TAG>&>(*pointer);
-
-    bimap_size++;
-    right_set.insert(r_node);
-    left_set.insert(l_node);
-
-    return left_iterator(left_set.find_ptr(l_node.value));
+    return perfect_insert(left, std::move(right));
   }
   left_iterator insert(left_t&& left, right_t const& right) {
-    if (find_left(left) != end_left() || find_right(right) != end_right()) {
-      return end_left();
-    }
-
-    node_t* pointer = new node_t(std::move(left), right);
-
-    auto& l_node = static_cast<node_element<Left, LEFT_TAG>&>(*pointer);
-    auto& r_node = static_cast<node_element<Right, RIGHT_TAG>&>(*pointer);
-
-    bimap_size++;
-    right_set.insert(r_node);
-    left_set.insert(l_node);
-
-    return left_iterator(left_set.find_ptr(l_node.value));
+    return perfect_insert(std::forward<left_t>(left), right);
   }
-  left_iterator insert(left_t&& left, right_t&& right) {
-    if (find_left(left) != end_left() || find_right(right) != end_right()) {
-      return end_left();
-    }
-
-    node_t* pointer = new node_t(std::move(left), std::move(right));
-
-    auto& l_node = static_cast<node_element<Left, LEFT_TAG>&>(*pointer);
-    auto& r_node = static_cast<node_element<Right, RIGHT_TAG>&>(*pointer);
-
-    bimap_size++;
-    right_set.insert(r_node);
-    left_set.insert(l_node);
-
-    return left_iterator(left_set.find_ptr(l_node.value));
-  }
-
-  void remove(left_iterator it) {
-    bimap_size--;
-
-    auto* ptr_tmp_node =
-        static_cast<node_element<Left, LEFT_TAG>*>(it.get_ptr());
-    auto* ptr_node = static_cast<node*>(ptr_tmp_node);
-
-    auto& left_value = *it;
-    auto& right_value = *(it.flip());
-
-    left_set.erase(left_value);
-    right_set.erase(right_value);
-
-    delete ptr_node;
-  }
-  void remove(right_iterator it) {
-    bimap_size--;
-
-    auto* ptr_tmp_node =
-        static_cast<node_element<Right, RIGHT_TAG>*>(it.get_ptr());
-    auto* ptr_node = static_cast<node*>(ptr_tmp_node);
-
-    auto& right_value = *it;
-    auto& left_value = *it.flip();
-
-    left_set.erase(left_value);
-    right_set.erase(right_value);
-
-    delete ptr_node;
+  left_iterator insert(left_t const& left, right_t const& right) {
+    return perfect_insert(left, right);
   }
 
   // Удаляет элемент и соответствующий ему парный.
@@ -305,6 +226,7 @@ public:
     remove(tmp);
     return it;
   }
+
   bool erase_right(right_t const& right) {
     auto it = find_right(right);
     if (it == end_right()) {
@@ -369,22 +291,25 @@ public:
   right_t const& at_left_or_default(left_t const& key) {
     auto it = find_left(key);
     if (it == end_left()) {
-      if (find_right(right_t()) != end_right()) {
-        erase_right(right_t());
+      auto tmp_default_value = right_t();
+      if (find_right(tmp_default_value) != end_right()) {
+        erase_right(tmp_default_value);
       }
-      it = insert(key, right_t());
+      it = insert(key, tmp_default_value);
     }
     return *it.flip();
   }
+
   template <typename T = Left,
             std::enable_if_t<std::is_default_constructible_v<T>, int> = 0>
   left_t const& at_right_or_default(right_t const& key) {
     auto it = find_right(key);
     if (it == end_right()) {
-      if (find_left(left_t()) != end_left()) {
-        erase_left(left_t());
+      auto tmp_default_value = left_t();
+      if (find_left(tmp_default_value) != end_left()) {
+        erase_left(tmp_default_value);
       }
-      insert(left_t(), key);
+      insert(tmp_default_value, key);
       it = find_right(key);
     }
     return *it.flip();
@@ -399,7 +324,6 @@ public:
   left_iterator upper_bound_left(const left_t& left) const {
     return left_iterator(left_set.upper_bound(left));
   }
-
   right_iterator lower_bound_right(const right_t& right) const {
     return right_iterator(right_set.lower_bound(right));
   }
@@ -456,5 +380,48 @@ public:
 
   bool operator!=(bimap const& other) const {
     return !(*this == other);
+  }
+
+  void swap(bimap& other) {
+    std::swap(left_set.root, other.left_set.root);
+    std::swap(right_set.root, other.right_set.root);
+    std::swap(bimap_size, other.bimap_size);
+  }
+
+private:
+  template <class iterator_type>
+  void remove(iterator_type it) {
+    bimap_size--;
+
+    auto* ptr_node = it.get_ptr_node_t();
+
+    auto& left_value =
+        static_cast<node_element<Left, LEFT_TAG>&>(*ptr_node).value;
+    auto& right_value =
+        static_cast<node_element<Right, RIGHT_TAG>&>(*ptr_node).value;
+
+    left_set.erase(left_value);
+    right_set.erase(right_value);
+
+    delete ptr_node;
+  }
+
+  template <class left_type = left_t, class right_type = right_t>
+  left_iterator perfect_insert(left_type&& left, right_type&& right) {
+    if (find_left(left) != end_left() || find_right(right) != end_right()) {
+      return end_left();
+    }
+
+    node_t* pointer = new node_t(std::forward<left_type>(left),
+                                 std::forward<right_type>(right));
+
+    auto& l_node = static_cast<node_element<Left, LEFT_TAG>&>(*pointer);
+    auto& r_node = static_cast<node_element<Right, RIGHT_TAG>&>(*pointer);
+
+    right_set.insert(r_node);
+    left_set.insert(l_node);
+    bimap_size++;
+
+    return left_iterator(left_set.find_ptr(l_node.value));
   }
 };
