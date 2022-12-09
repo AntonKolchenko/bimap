@@ -115,7 +115,7 @@ struct set : Comparator { /// AVL-tree
     }
     pointer = erase(pointer);
     while (pointer != root) {
-      auto tmp_ptr = pointer->parent;
+      auto* tmp_ptr = pointer->parent;
       correcter(pointer);
       pointer = tmp_ptr;
     }
