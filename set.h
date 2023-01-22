@@ -50,6 +50,7 @@ struct set_element_base {
 template <typename T, typename Tag>
 struct set_element : set_element_base {
   T value;
+
   set_element(T const& value) : value(value) {}
   set_element(T&& value) : value(std::move(value)) {}
 };
@@ -58,16 +59,13 @@ template <class T, class Tag, typename Compare = std::less<T>>
 struct set : Compare { /// AVL-tree
 
   set_element_base* root{nullptr};
+  set_element_base fiction;
 
   explicit set(Compare compare = Compare()) : Compare(std::move(compare)) {
-    root = new set_element_base;
+    root = &fiction;
   }
 
   set(set const& other) = delete;
-
-  ~set() {
-    delete root;
-  }
 
   Compare const& cmp() const {
     return static_cast<const Compare&>(*this);
