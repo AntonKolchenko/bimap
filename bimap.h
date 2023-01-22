@@ -13,44 +13,33 @@ private:
   struct LEFT_TAG;
   struct RIGHT_TAG;
 
-  template <class T, class Tag>
-  struct node_element : intrusive::set_element_base {
-    T value;
-
-    node_element(T const& val) : value(val), intrusive::set_element_base() {}
-
-    node_element(T&& val)
-        : value(std::move(val)), intrusive::set_element_base() {}
-  };
-
   using left_t = Left;
   using right_t = Right;
 
-  struct node : node_element<Left, LEFT_TAG>, node_element<Right, RIGHT_TAG> {
+  struct node : intrusive::set_element<Left, LEFT_TAG>,
+                intrusive::set_element<Right, RIGHT_TAG> {
     node(Left&& left, Right&& right)
-        : node_element<Left, LEFT_TAG>(std::move(left)),
-          node_element<Right, RIGHT_TAG>(std::move(right)) {}
+        : intrusive::set_element<Left, LEFT_TAG>(std::move(left)),
+          intrusive::set_element<Right, RIGHT_TAG>(std::move(right)) {}
 
     node(Left const& left, Right&& right)
-        : node_element<Left, LEFT_TAG>(left), node_element<Right, RIGHT_TAG>(
-                                                  std::move(right)) {}
+        : intrusive::set_element<Left, LEFT_TAG>(left),
+          intrusive::set_element<Right, RIGHT_TAG>(std::move(right)) {}
 
     node(Left&& left, Right const& right)
-        : node_element<Left, LEFT_TAG>(std::move(left)),
-          node_element<Right, RIGHT_TAG>(right) {}
+        : intrusive::set_element<Left, LEFT_TAG>(std::move(left)),
+          intrusive::set_element<Right, RIGHT_TAG>(right) {}
 
     node(Left const& left, Right const& right)
-        : node_element<Left, LEFT_TAG>(left), node_element<Right, RIGHT_TAG>(
-                                                  right) {}
+        : intrusive::set_element<Left, LEFT_TAG>(left),
+          intrusive::set_element<Right, RIGHT_TAG>(right) {}
   };
 
   using node_t = node;
 
   std::size_t bimap_size = 0;
-  intrusive::set<node_element<Left, LEFT_TAG>, Left, LEFT_TAG, CompareLeft>
-      left_set;
-  intrusive::set<node_element<Right, RIGHT_TAG>, Right, RIGHT_TAG, CompareRight>
-      right_set;
+  intrusive::set<Left, LEFT_TAG, CompareLeft> left_set;
+  intrusive::set<Right, RIGHT_TAG, CompareRight> right_set;
 
 public:
   template <class iterator_value, class iterator_tag,
@@ -87,7 +76,8 @@ public:
     }
 
     reference operator*() const {
-      return static_cast<node_element<iterator_value, iterator_tag>&>(*ptr)
+      return static_cast<intrusive::set_element<iterator_value, iterator_tag>&>(
+                 *ptr)
           .value;
     }
     pointer operator->() const {
@@ -103,11 +93,12 @@ public:
       }
 
       auto* tmp_node =
-          static_cast<node_element<iterator_value, iterator_tag>*>(ptr);
+          static_cast<intrusive::set_element<iterator_value, iterator_tag>*>(
+              ptr);
       auto* tmp_lca_node = static_cast<node*>(tmp_node);
-      auto* other_tmp_node =
-          static_cast<node_element<other_iterator_value, other_iterator_tag>*>(
-              tmp_lca_node);
+      auto* other_tmp_node = static_cast<
+          intrusive::set_element<other_iterator_value, other_iterator_tag>*>(
+          tmp_lca_node);
 
       return other_type_iterator(
           static_cast<intrusive::set_element_base*>(other_tmp_node));
@@ -115,7 +106,8 @@ public:
 
     node_t* get_ptr_node_t() const {
       auto* tmp_node =
-          static_cast<node_element<iterator_value, iterator_tag>*>(ptr);
+          static_cast<intrusive::set_element<iterator_value, iterator_tag>*>(
+              ptr);
       return static_cast<node_t*>(tmp_node);
     }
 
@@ -396,9 +388,9 @@ private:
     auto* ptr_node = it.get_ptr_node_t();
 
     auto& left_value =
-        static_cast<node_element<Left, LEFT_TAG>&>(*ptr_node).value;
+        static_cast<intrusive::set_element<Left, LEFT_TAG>&>(*ptr_node).value;
     auto& right_value =
-        static_cast<node_element<Right, RIGHT_TAG>&>(*ptr_node).value;
+        static_cast<intrusive::set_element<Right, RIGHT_TAG>&>(*ptr_node).value;
 
     left_set.erase(left_value);
     right_set.erase(right_value);
@@ -415,8 +407,10 @@ private:
     node_t* pointer = new node_t(std::forward<left_type>(left),
                                  std::forward<right_type>(right));
 
-    auto& l_node = static_cast<node_element<Left, LEFT_TAG>&>(*pointer);
-    auto& r_node = static_cast<node_element<Right, RIGHT_TAG>&>(*pointer);
+    auto& l_node =
+        static_cast<intrusive::set_element<Left, LEFT_TAG>&>(*pointer);
+    auto& r_node =
+        static_cast<intrusive::set_element<Right, RIGHT_TAG>&>(*pointer);
 
     right_set.insert(r_node);
     left_set.insert(l_node);

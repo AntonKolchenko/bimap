@@ -1,6 +1,5 @@
 #pragma once
 
-#include "bimap.h"
 #include <utility>
 
 namespace intrusive {
@@ -48,14 +47,19 @@ struct set_element_base {
   }
 };
 
-template <class T, class type_T, class Tag,
-          class Comparator = std::less<type_T>>
-struct set : Comparator { /// AVL-tree
+template <typename T, typename Tag>
+struct set_element : set_element_base {
+  T value;
+  set_element(T const& value) : value(value) {}
+  set_element(T&& value) : value(std::move(value)) {}
+};
+
+template <class T, class Tag, typename Compare = std::less<T>>
+struct set : Compare { /// AVL-tree
 
   set_element_base* root{nullptr};
 
-  explicit set(Comparator compare = Comparator())
-      : Comparator(std::move(compare)) {
+  explicit set(Compare compare = Compare()) : Compare(std::move(compare)) {
     root = new set_element_base;
   }
 
@@ -65,15 +69,15 @@ struct set : Comparator { /// AVL-tree
     delete root;
   }
 
-  Comparator const& cmp() const {
-    return static_cast<const Comparator&>(*this);
+  Compare const& cmp() const {
+    return static_cast<const Compare&>(*this);
   }
 
-  set_element_base* lower_bound(const type_T& value) const {
+  set_element_base* lower_bound(const T& value) const {
     return lower_bound(value, root->left);
   }
 
-  set_element_base* upper_bound(const type_T& value) const {
+  set_element_base* upper_bound(const T& value) const {
     set_element_base* tmp_pointer = lower_bound(value);
     if (tmp_pointer == root) {
       return root;
@@ -85,7 +89,7 @@ struct set : Comparator { /// AVL-tree
     return tmp_pointer;
   }
 
-  set_element_base* find_ptr(const type_T& value) const {
+  set_element_base* find_ptr(const T& value) const {
     set_element_base* pointer = lower_bound(value);
 
     if (pointer == root) {
@@ -99,7 +103,7 @@ struct set : Comparator { /// AVL-tree
     return pointer;
   }
 
-  void insert(T& element) {
+  void insert(set_element<T, Tag>& element) {
     if (root->left == nullptr) {
       root->left = &static_cast<set_element_base&>(element);
       root->left->parent = root;
@@ -108,7 +112,7 @@ struct set : Comparator { /// AVL-tree
     insert(element, root->left);
   }
 
-  void erase(const type_T& value) {
+  void erase(const T& value) {
     set_element_base* pointer = find_ptr(value);
     if (pointer == root) {
       return;
@@ -122,10 +126,7 @@ struct set : Comparator { /// AVL-tree
   }
 
   set_element_base* begin_ptr() const {
-    if (root->left) {
-      return root->left->get_min_node_ptr();
-    }
-    return root;
+    return root->get_min_node_ptr();
   }
 
   set_element_base* end_ptr() const {
@@ -354,11 +355,11 @@ private:
     return erase(pointer);
   }
 
-  static type_T const& get_value(set_element_base* pointer) {
-    return static_cast<T&>(*pointer).value;
+  static T const& get_value(set_element_base* pointer) {
+    return static_cast<set_element<T, Tag>&>(*pointer).value;
   }
 
-  void insert(T& element, set_element_base* pointer) {
+  void insert(set_element<T, Tag>& element, set_element_base* pointer) {
     auto& tree_value = get_value(pointer);
     if (cmp()(element.value, tree_value)) {
       if (pointer->left) {
@@ -382,7 +383,7 @@ private:
     correcter(pointer);
   }
 
-  set_element_base* lower_bound(const type_T& value,
+  set_element_base* lower_bound(T const& value,
                                 set_element_base* pointer) const {
     if (pointer == nullptr) {
       return root;
