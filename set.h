@@ -58,12 +58,9 @@ struct set_element : set_element_base {
 template <class T, class Tag, typename Compare = std::less<T>>
 struct set : Compare { /// AVL-tree
 
-  set_element_base* root{nullptr};
-  set_element_base fiction;
+  mutable set_element_base m_root;
 
-  explicit set(Compare compare = Compare()) : Compare(std::move(compare)) {
-    root = &fiction;
-  }
+  explicit set(Compare compare = Compare()) : Compare(std::move(compare)) {}
 
   set(set const& other) = delete;
 
@@ -72,13 +69,13 @@ struct set : Compare { /// AVL-tree
   }
 
   set_element_base* lower_bound(const T& value) const {
-    return lower_bound(value, root->left);
+    return lower_bound(value, m_root.left);
   }
 
   set_element_base* upper_bound(const T& value) const {
     set_element_base* tmp_pointer = lower_bound(value);
-    if (tmp_pointer == root) {
-      return root;
+    if (tmp_pointer == &m_root) {
+      return &m_root;
     }
     if (cmp()(get_value(tmp_pointer), value) ==
         cmp()(value, get_value(tmp_pointer))) {
@@ -90,33 +87,33 @@ struct set : Compare { /// AVL-tree
   set_element_base* find_ptr(const T& value) const {
     set_element_base* pointer = lower_bound(value);
 
-    if (pointer == root) {
-      return root;
+    if (pointer == &m_root) {
+      return &m_root;
     }
 
     if (cmp()(get_value(pointer), value) != cmp()(value, get_value(pointer))) {
-      return root;
+      return &m_root;
     }
 
     return pointer;
   }
 
   void insert(set_element<T, Tag>& element) {
-    if (root->left == nullptr) {
-      root->left = &static_cast<set_element_base&>(element);
-      root->left->parent = root;
+    if (m_root.left == nullptr) {
+      m_root.left = &static_cast<set_element_base&>(element);
+      m_root.left->parent = &m_root;
       return;
     }
-    insert(element, root->left);
+    insert(element, m_root.left);
   }
 
   void erase(const T& value) {
     set_element_base* pointer = find_ptr(value);
-    if (pointer == root) {
+    if (pointer == &m_root) {
       return;
     }
     pointer = erase(pointer);
-    while (pointer != root) {
+    while (pointer != &m_root) {
       auto* tmp_ptr = pointer->parent;
       correcter(pointer);
       pointer = tmp_ptr;
@@ -124,11 +121,11 @@ struct set : Compare { /// AVL-tree
   }
 
   set_element_base* begin_ptr() const {
-    return root->get_min_node_ptr();
+    return m_root.get_min_node_ptr();
   }
 
   set_element_base* end_ptr() const {
-    return root;
+    return &m_root;
   }
 
 private:
@@ -384,7 +381,7 @@ private:
   set_element_base* lower_bound(T const& value,
                                 set_element_base* pointer) const {
     if (pointer == nullptr) {
-      return root;
+      return &m_root;
     }
     if (cmp()(get_value(pointer), value) == cmp()(value, get_value(pointer))) {
       return pointer;

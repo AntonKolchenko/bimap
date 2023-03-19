@@ -122,8 +122,8 @@ public:
   bimap(CompareLeft compare_left = CompareLeft(),
         CompareRight compare_right = CompareRight())
       : left_set(std::move(compare_left)), right_set(std::move(compare_right)) {
-    left_set.root->parent = right_set.root;
-    right_set.root->parent = left_set.root;
+    left_set.m_root.parent = &right_set.m_root;
+    right_set.m_root.parent = &left_set.m_root;
   }
 
   // Конструкторы от других и присваивания
@@ -364,20 +364,20 @@ public:
   }
 
   void swap(bimap& other) {
-    std::swap(left_set.root->left, other.left_set.root->left);
-    if (left_set.root->left) {
-      left_set.root->left->parent = left_set.root;
+    std::swap(left_set.m_root.left, other.left_set.m_root.left);
+    if (left_set.m_root.left) {
+      left_set.m_root.left->parent = &left_set.m_root;
     }
-    if (other.left_set.root->left) {
-      other.left_set.root->left->parent = other.left_set.root;
+    if (other.left_set.m_root.left) {
+      other.left_set.m_root.left->parent = &other.left_set.m_root;
     }
 
-    std::swap(right_set.root->left, other.right_set.root->left);
-    if (right_set.root->left) {
-      right_set.root->left->parent = right_set.root;
+    std::swap(right_set.m_root.left, other.right_set.m_root.left);
+    if (right_set.m_root.left) {
+      right_set.m_root.left->parent = &right_set.m_root;
     }
-    if (other.right_set.root->left) {
-      other.right_set.root->left->parent = other.right_set.root;
+    if (other.right_set.m_root.left) {
+      other.right_set.m_root.left->parent = &other.right_set.m_root;
     }
 
     std::swap(bimap_size, other.bimap_size);
